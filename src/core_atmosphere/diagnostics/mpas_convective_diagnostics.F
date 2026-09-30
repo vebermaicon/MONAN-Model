@@ -236,6 +236,9 @@ module mpas_convective_diagnostics
         integer, pointer :: nCells, nCellsSolve, nVertLevels, nVertLevelsP1
 
         ! Fields that are computed in this routine
+        real (kind=RKIND), dimension(:), pointer :: sbli
+	    real (kind=RKIND), dimension(:), pointer :: mlli
+	    real (kind=RKIND), dimension(:), pointer :: muli
         real (kind=RKIND), dimension(:), pointer :: cape
         real (kind=RKIND), dimension(:), pointer :: cin
         real (kind=RKIND), dimension(:), pointer :: lcl
@@ -277,12 +280,18 @@ module mpas_convective_diagnostics
 
         real (kind=RKIND) :: evp
 
-        logical :: need_cape, need_cin, need_lcl, need_lfc, need_srh_01km, need_srh_03km, need_uzonal_sfc, need_uzonal_1km, &
+        logical :: need_sbli, need_muli, need_mlli, need_cape, need_cin, need_lcl, need_lfc, need_srh_01km, need_srh_03km, need_uzonal_sfc, need_uzonal_1km, &
                    need_uzonal_6km, need_umerid_sfc, need_umerid_1km, need_umerid_6km, need_tsfc, need_tdsfc
         logical :: need_any_diags
 
         need_any_diags = .false.
 
+        need_sbli = MPAS_field_will_be_written('sbli')
+        need_any_diags = need_any_diags .or. need_sbli
+        need_mlli = MPAS_field_will_be_written('mlli')
+        need_any_diags = need_any_diags .or. need_mlli
+	    need_muli = MPAS_field_will_be_written('muli')
+        need_any_diags = need_any_diags .or. need_muli
         need_cape = MPAS_field_will_be_written('cape')
         need_any_diags = need_any_diags .or. need_cape
         need_cin = MPAS_field_will_be_written('cin')
@@ -319,6 +328,9 @@ module mpas_convective_diagnostics
             call mpas_pool_get_dimension(mesh, 'nVertLevels', nVertLevels)
             call mpas_pool_get_dimension(mesh, 'nVertLevelsP1', nVertLevelsP1)
 
+            call mpas_pool_get_array(diag, 'sbli', sbli)
+            call mpas_pool_get_array(diag, 'mlli',  mlli)
+	        call mpas_pool_get_array(diag, 'muli', muli)
             call mpas_pool_get_array(diag, 'cape', cape)
             call mpas_pool_get_array(diag, 'cin',  cin)
             call mpas_pool_get_array(diag, 'lcl',  lcl)
@@ -472,23 +484,58 @@ module mpas_convective_diagnostics
 
             end do  
 
-            !  calculate cape and cin
-            if (need_cape .or. need_cin) then
-                do iCell=1, nCellsSolve
-                    p_in(1:nVertLevels) = (pressure_p(1:nVertLevels,iCell) + pressure_base(1:nVertLevels,iCell)) / 100.0_RKIND
-                    t_in(1:nVertLevels) = temperature(1:nVertLevels,iCell) - 273.15_RKIND
+            if (need_cape .or. need_cin .or. need_mlcape .or. need_mlcin .or. &
+                need_sbcape .or. need_sbcin .or. need_sbli .or. need_muli .or. need_mlli) then
+
+                do iCell = 1, nCellsSolve
+
+                    p_in(1:nVertLevels)  = (pressure_p(1:nVertLevels,iCell) + pressure_base(1:nVertLevels,iCell)) / 100.0_RKIND
+                    t_in(1:nVertLevels)  = temperature(1:nVertLevels,iCell) - 273.15_RKIND
                     td_in(1:nVertLevels) = dewpoint(1:nVertLevels,iCell) - 273.15_RKIND
+		    
+		    !   do k=1,nVertLevels
+                    !     relhum(k,iCell) = max(1.e-08,min(1.,relhum(k,iCell)))
+                    !     td_in(k) = 243.04*(log(relhum(k,iCell))+((17.625*t_in(k))/(243.04+t_in(k)))) & 
+                    !                      /(17.625-log(relhum(k,iCell))-((17.625*t_in(k))/(243.04+t_in(k)))) 
+                    !   end do
 
-                 !   do k=1,nVertLevels
-                 !     relhum(k,iCell) = max(1.e-08,min(1.,relhum(k,iCell)))
-                 !     td_in(k) = 243.04*(log(relhum(k,iCell))+((17.625*t_in(k))/(243.04+t_in(k)))) & 
-                 !                      /(17.625-log(relhum(k,iCell))-((17.625*t_in(k))/(243.04+t_in(k)))) 
-                 !   end do
 
-                    call getcape( nVertLevels, p_in, t_in, td_in, cape_out, cin_out )
+                    !  calculate mucape and mucin
+                    if (need_cape .or. need_cin) then
+                        call getcape(nVertLevels, p_in, t_in, td_in, 2, cape_out, cin_out)
+                        cape(iCell) = cape_out
+                        cin(iCell)  = cin_out
+                    end if
+                    
+		    !  calculate mlcape and mlcin
+                    if (need_mlcape .or. need_mlcin) then
+                        call getcape(nVertLevels, p_in, t_in, td_in, 3, cape_out, cin_out)
+                        mlcape(iCell) = cape_out
+                        mlcin(iCell)  = cin_out
+                    end if
+                    
+		    !  calculate sbcape and sbcin
+                    if (need_sbcape .or. need_sbcin) then
+                        call getcape(nVertLevels, p_in, t_in, td_in, 1, cape_out, cin_out)
+                        sbcape(iCell) = cape_out
+                        sbcin(iCell)  = cin_out
+                    end if
 
-                    cape(iCell) = cape_out
-                    cin(iCell) = cin_out
+                    		    
+		    !  calculate sb_lifted
+                    if (need_sbli) then
+                        call get_lifted_index(nVertLevels, p_in, t_in, td_in, 1, sbli(iCell))
+                    end if
+                    
+		    !  calculate mu_lifted
+                    if (need_muli) then
+                        call get_lifted_index(nVertLevels, p_in, t_in, td_in, 2, muli(iCell))
+                    end if
+                    
+		    !  calculate ml_lifted
+                    if (need_mlli) then
+                        call get_lifted_index(nVertLevels, p_in, t_in, td_in, 3, mlli(iCell))
+                    end if
 
                 end do
             end if
@@ -1057,6 +1104,172 @@ module mpas_convective_diagnostics
 
     return
     end subroutine getcape
+    !-----------------------------------------------------------------------
+    ! Subrotina para cálculo do Lifted Index (SBLI, MULI, MLLI)
+    !-----------------------------------------------------------------------
+    subroutine get_lifted_index(nk, p_in, t_in, td_in, source, li_out)
+        implicit none
+
+        integer, intent(in) :: nk
+        integer, intent(in) :: source ! 1 = Surface-Based, 2 = Most Unstable, 3 = Mixed-Layer
+        real (kind=RKIND), dimension(nk), intent(in) :: p_in, t_in, td_in
+        real (kind=RKIND), intent(out) :: li_out
+
+        integer :: k, k500, k_max, nsteps
+        real (kind=RKIND), dimension(nk) :: p_hpa_arr
+        real (kind=RKIND) :: p_parcel, t_parcel, td_parcel
+        real (kind=RKIND) :: t_env_500, t_parcel_500
+        real (kind=RKIND) :: p_target, theta_e, max_theta_e
+        real (kind=RKIND) :: tk, tdk, p_hpa, e_sat, r_mix, t_tlcl, p_lcl
+        real (kind=RKIND) :: p_curr, t_curr, dp, es, qv_sat, dt_dp
+
+        p_target = 500.0_RKIND
+        li_out = 0.0_RKIND
+
+        ! ------------------------------------------------------------------
+        ! Conversão de Unidades: Garante que a Pressão esteja em hPa
+        ! ------------------------------------------------------------------
+        if (p_in(1) > 2000.0_RKIND) then
+            p_hpa_arr(:) = p_in(:) / 100.0_RKIND  ! Converte Pa para hPa
+        else
+            p_hpa_arr(:) = p_in(:)               ! Já está em hPa
+        end if
+
+        ! Caso a topografia local esteja acima/muito próxima de 500 hPa
+        if (p_hpa_arr(1) <= p_target + 10.0_RKIND) then
+            li_out = 0.0_RKIND
+            return
+        end if
+
+        ! ------------------------------------------------------------------
+        ! 1. Seleção da Parcela Inicial (P [hPa], T [C], Td [C])
+        ! ------------------------------------------------------------------
+        if (source == 1) then
+            ! Surface-Based
+            p_parcel  = p_hpa_arr(1)
+            t_parcel  = t_in(1)
+            td_parcel = min(td_in(1), t_in(1))
+
+        else if (source == 2) then
+            ! Most Unstable (Maior Theta-e nos primeiros 300 hPa ou ate 400 hPa absolutos)
+            max_theta_e = -999.0_RKIND
+            k_max = 1
+
+            do k = 1, nk
+                ! Nos Andes (pressao baixa na sup), limita a busca a no maximo 150 hPa acima da sup
+                ! ou limita a pressao absoluta minima em 450 hPa (evita pegar a troposfera superior/estratosfera)
+                if ((p_hpa_arr(1) - p_hpa_arr(k) > 300.0_RKIND) .or. &
+                    (p_hpa_arr(k) < 450.0_RKIND) .or. &
+                    (p_hpa_arr(1) < 700.0_RKIND .and. (p_hpa_arr(1) - p_hpa_arr(k) > 150.0_RKIND))) exit
+
+                tk    = t_in(k) + 273.15_RKIND
+                tdk   = min(td_in(k), t_in(k)) + 273.15_RKIND
+                p_hpa = p_hpa_arr(k)
+
+                ! 1. Pressao de vapor e Razao de Mistura em g/kg (fator 1000.0)
+                e_sat = 6.112_RKIND * exp((17.67_RKIND * (tdk - 273.15_RKIND)) / max(1.0_RKIND, tdk - 29.65_RKIND))
+                r_mix = 1000.0_RKIND * (0.622_RKIND * e_sat / max(1.0_RKIND, p_hpa - e_sat)) ! em g/kg
+
+                ! 2. Temperatura no LCL (K)
+                t_tlcl = 56.0_RKIND + (1.0_RKIND / ((1.0_RKIND / max(1.0_RKIND, tdk - 56.0_RKIND)) + (log(tk / tdk) / 800.0_RKIND)))
+
+                ! 3. Theta-e Equivalente de Bolton (1980) usando r_mix em g/kg
+                theta_e = tk * ((1000.0_RKIND / p_hpa)**(0.2854_RKIND * (1.0_RKIND - (0.00028_RKIND * r_mix)))) * &
+                           exp(((3376.0_RKIND / t_tlcl) - 2.54_RKIND) * (0.001_RKIND * r_mix * (1.0_RKIND + (0.00081_RKIND * r_mix))))
+
+                if (theta_e > max_theta_e) then
+                    max_theta_e = theta_e
+                    k_max = k
+                end if
+            end do
+
+            p_parcel  = p_hpa_arr(k_max)
+            t_parcel  = t_in(k_max)
+            td_parcel = min(td_in(k_max), t_in(k_max))
+
+        else if (source == 3) then
+            ! Mixed-Layer (Média dos primeiros 100 hPa acima da superfície)
+            p_parcel  = 0.0_RKIND
+            t_parcel  = 0.0_RKIND
+            td_parcel = 0.0_RKIND
+            k_max = 0
+
+            do k = 1, nk
+                if (p_hpa_arr(1) - p_hpa_arr(k) > 100.0_RKIND) exit
+                p_parcel  = p_parcel  + p_hpa_arr(k)
+                t_parcel  = t_parcel  + t_in(k)
+                td_parcel = td_parcel + min(td_in(k), t_in(k))
+                k_max = k_max + 1
+            end do
+
+            if (k_max > 0) then
+                p_parcel  = p_parcel  / real(k_max, RKIND)
+                t_parcel  = t_parcel  / real(k_max, RKIND)
+                td_parcel = td_parcel / real(k_max, RKIND)
+            else
+                p_parcel  = p_hpa_arr(1)
+                t_parcel  = t_in(1)
+                td_parcel = min(td_in(1), t_in(1))
+            end if
+        end if
+
+        ! ------------------------------------------------------------------
+        ! 2. Interpolação da Temperatura do Ambiente em 500 hPa
+        ! ------------------------------------------------------------------
+        k500 = 1
+        do k = 1, nk - 1
+            if (p_hpa_arr(k) >= p_target .and. p_hpa_arr(k+1) <= p_target) then
+                k500 = k
+                exit
+            end if
+        end do
+
+        t_env_500 = t_in(k500) + (t_in(k500+1) - t_in(k500)) * &
+                    ((p_target - p_hpa_arr(k500)) / (p_hpa_arr(k500+1) - p_hpa_arr(k500)))
+
+        ! ------------------------------------------------------------------
+        ! 3. Cálculo do LCL (Nível de Condensação por Levantamento)
+        ! ------------------------------------------------------------------
+        tk  = t_parcel + 273.15_RKIND
+        tdk = td_parcel + 273.15_RKIND
+        
+        t_tlcl = 56.0_RKIND + (1.0_RKIND / ((1.0_RKIND / (tdk - 56.0_RKIND)) + (log(tk / tdk) / 800.0_RKIND)))
+        p_lcl  = p_parcel * ((t_tlcl / tk)**(1.0_RKIND / 0.2854_RKIND))
+
+        ! ------------------------------------------------------------------
+        ! 4. Ascensão da Parcela até 500 hPa
+        ! ------------------------------------------------------------------
+        if (p_lcl <= p_target) then
+            t_parcel_500 = (tk * ((p_target / p_parcel)**0.2854_RKIND)) - 273.15_RKIND
+        else
+            t_curr = t_tlcl
+            p_curr = p_lcl
+
+            nsteps = 50
+            dp = (p_target - p_lcl) / real(nsteps, RKIND)
+
+            do k = 1, nsteps
+                es = 6.112_RKIND * exp((17.67_RKIND * (t_curr - 273.15_RKIND)) / (t_curr - 29.65_RKIND))
+                qv_sat = 0.622_RKIND * es / max(1.0_RKIND, p_curr - es)
+
+                dt_dp = (0.2854_RKIND * t_curr / p_curr) * &
+                        ((1.0_RKIND + (2501000.0_RKIND * qv_sat / (287.05_RKIND * t_curr))) / &
+                         (1.0_RKIND + (0.622_RKIND * (2501000.0_RKIND**2) * qv_sat / (1005.0_RKIND * 287.05_RKIND * (t_curr**2)))))
+
+                t_curr = t_curr + dt_dp * dp
+                p_curr = p_curr + dp
+            end do
+
+            t_parcel_500 = t_curr - 273.15_RKIND
+        end if
+
+        ! ------------------------------------------------------------------
+        ! 5. LI = T_ambiente - T_parcela
+        ! ------------------------------------------------------------------
+        li_out = t_env_500 - t_parcel_500
+    
+    return
+    end subroutine get_lifted_index
 
 !-----------------------------------------------------------------------
 !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc

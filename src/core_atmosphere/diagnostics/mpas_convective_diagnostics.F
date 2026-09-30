@@ -241,6 +241,10 @@ module mpas_convective_diagnostics
 	    real (kind=RKIND), dimension(:), pointer :: muli
         real (kind=RKIND), dimension(:), pointer :: cape
         real (kind=RKIND), dimension(:), pointer :: cin
+        real (kind=RKIND), dimension(:), pointer :: mlcape
+        real (kind=RKIND), dimension(:), pointer :: mlcin
+	    real (kind=RKIND), dimension(:), pointer :: sbcape
+        real (kind=RKIND), dimension(:), pointer :: sbcin
         real (kind=RKIND), dimension(:), pointer :: lcl
         real (kind=RKIND), dimension(:), pointer :: lfc
         real (kind=RKIND), dimension(:), pointer :: srh_0_1km
@@ -280,7 +284,7 @@ module mpas_convective_diagnostics
 
         real (kind=RKIND) :: evp
 
-        logical :: need_sbli, need_muli, need_mlli, need_cape, need_cin, need_lcl, need_lfc, need_srh_01km, need_srh_03km, need_uzonal_sfc, need_uzonal_1km, &
+        logical :: need_sbli, need_muli, need_mlli, need_cape, need_cin, need_mlcape, need_mlcin, need_sbcape, need_sbcin, need_lcl, need_lfc, need_srh_01km, need_srh_03km, need_uzonal_sfc, need_uzonal_1km, &
                    need_uzonal_6km, need_umerid_sfc, need_umerid_1km, need_umerid_6km, need_tsfc, need_tdsfc
         logical :: need_any_diags
 
@@ -296,6 +300,14 @@ module mpas_convective_diagnostics
         need_any_diags = need_any_diags .or. need_cape
         need_cin = MPAS_field_will_be_written('cin')
         need_any_diags = need_any_diags .or. need_cin
+        need_mlcape = MPAS_field_will_be_written('mlcape')
+        need_any_diags = need_any_diags .or. need_mlcape
+        need_mlcin = MPAS_field_will_be_written('mlcin')
+        need_any_diags = need_any_diags .or. need_mlcin
+	    need_sbcape = MPAS_field_will_be_written('sbcape')
+        need_any_diags = need_any_diags .or. need_sbcape
+        need_sbcin = MPAS_field_will_be_written('sbcin')
+        need_any_diags = need_any_diags .or. need_sbcin
         need_lcl = MPAS_field_will_be_written('lcl')
         need_any_diags = need_any_diags .or. need_lcl
         need_lfc = MPAS_field_will_be_written('lfc')
@@ -333,6 +345,10 @@ module mpas_convective_diagnostics
 	        call mpas_pool_get_array(diag, 'muli', muli)
             call mpas_pool_get_array(diag, 'cape', cape)
             call mpas_pool_get_array(diag, 'cin',  cin)
+            call mpas_pool_get_array(diag, 'mlcape', mlcape)
+            call mpas_pool_get_array(diag, 'mlcin',  mlcin)
+	        call mpas_pool_get_array(diag, 'sbcape', sbcape)
+            call mpas_pool_get_array(diag, 'sbcin',  sbcin)
             call mpas_pool_get_array(diag, 'lcl',  lcl)
             call mpas_pool_get_array(diag, 'lfc',  lfc)
             call mpas_pool_get_array(diag, 'srh_0_1km', srh_0_1km)
@@ -661,7 +677,7 @@ module mpas_convective_diagnostics
 !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 !-----------------------------------------------------------------------
 
-    subroutine getcape( nk , p_in , t_in , td_in, cape , cin )
+    subroutine getcape( nk , p_in , t_in , td_in, source, cape , cin )
     implicit none
 
     integer, intent(in) :: nk
@@ -708,7 +724,7 @@ module mpas_convective_diagnostics
                                       !  results,larger number makes code 
                                       !  go faster)
 
-    integer, parameter :: source = 2    ! Source parcel:
+    integer, intent(in) :: source     ! Source parcel:
                                         ! 1 = surface
                                         ! 2 = most unstable (max theta-e)
                                         ! 3 = mixed-layer (specify ml_depth)

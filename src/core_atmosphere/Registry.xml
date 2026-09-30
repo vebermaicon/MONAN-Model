@@ -1100,9 +1100,16 @@
 #endif
 
                         <!-- Begin convective diagnostics defined in diagnostics/Registry_convective.xml -->
+                        <var name="sbli"/>
+                        <var name="mlli"/>
+                        <var name="muli"/>
                         <var name="cape"/>
                         <var name="cin"/>
-                        <var name="lcl"/>
+                        <var name="mlcape"/>
+                        <var name="mlcin"/>
+                        <var name="sbcape"/>
+                        <var name="sbcin"/>
+			            <var name="lcl"/>
                         <var name="lfc"/>
                         <var name="srh_0_1km"/>
                         <var name="srh_0_3km"/>

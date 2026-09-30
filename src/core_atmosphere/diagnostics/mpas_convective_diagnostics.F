@@ -1204,14 +1204,14 @@ module mpas_convective_diagnostics
             td_parcel = min(td_in(k_max), t_in(k_max))
 
         else if (source == 3) then
-            ! Mixed-Layer (Média dos primeiros 100 hPa acima da superfície)
+            ! Mixed-Layer (Média dos primeiros 50 hPa acima da superfície)
             p_parcel  = 0.0_RKIND
             t_parcel  = 0.0_RKIND
             td_parcel = 0.0_RKIND
             k_max = 0
 
             do k = 1, nk
-                if (p_hpa_arr(1) - p_hpa_arr(k) > 100.0_RKIND) exit
+                if (p_hpa_arr(1) - p_hpa_arr(k) > 50.0_RKIND) exit
                 p_parcel  = p_parcel  + p_hpa_arr(k)
                 t_parcel  = t_parcel  + t_in(k)
                 td_parcel = td_parcel + min(td_in(k), t_in(k))

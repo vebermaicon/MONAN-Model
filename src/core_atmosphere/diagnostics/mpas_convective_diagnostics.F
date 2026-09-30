@@ -427,8 +427,8 @@ module mpas_convective_diagnostics
                   umeridional_6km(iCell) = column_height_value(umeridional(1:nVertLevels,iCell), zp, 6000.0_RKIND, nVertLevels)
               end if
 
-           !  storm-relative helicity
-           !  first, calculate storm motion, using Bunkers formula for right-moving storms
+              !  storm-relative helicity
+              !  first, calculate storm motion, using Bunkers formula for right-moving storms
 
                if (need_srh_01km .or. need_srh_03km) then
                    u_srh_bot = uzonal(1,iCell)
